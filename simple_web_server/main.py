@@ -10,25 +10,33 @@ response_template = """HTTP/1.0 200 OK
 import machine
 import ntptime, utime
 from machine import RTC
-from time import sleep
-
+seconds = ntptime.time()
 rtc = RTC()
-try:
-    seconds = ntptime.time()
-except:
-    seconds = 0
 rtc.datetime(utime.localtime(seconds))
+
+adc = machine.ADC(0)
 
 def time():
     body = """<html>
-<body>
-<h1>Time</h1>
-<p>%s</p>
-</body>
-</html>
-""" % str(rtc.datetime())
+ <body>
+ <h1>Time</h1>
+ <p>%s</p>
+ </body>
+ </html>
+    """ % str(rtc.datetime())
 
     return response_template % body
+
+
+def dummy():
+    body = "This is a dummy endpoint"
+
+    return response_template % body
+
+handlers = {
+    'time': time,
+    'dummy': dummy,
+}
 
 def main():
     s = socket.socket()
@@ -42,7 +50,6 @@ def main():
     print("Listening, connect your browser to http://<this_host>:8080/")
 
     while True:
-        sleep(.5)
         res = s.accept()
         client_s = res[0]
         client_addr = res[1]
@@ -50,8 +57,18 @@ def main():
         print("Request:")
         print(req)
 
-        response = time()
+        # The first line of a request looks like "GET /arbitrary/path/ HTTP/1.1".
+        # This grabs that first line and whittles it down to just "/arbitrary/path/"
+        path = req.decode().split("\r\n")[0].split(" ")[1]
 
+        # Given the path, identify the correct handler to use
+        handler = handlers[path.strip('/').split('/')[0]]
+
+        response = handler()
+
+        # A handler returns an entire response in the form of a multi-line string.
+        # This breaks up the response into single strings, byte-encodes them, and
+        # joins them back together with b"\r\n". Then it sends that to the client.
         client_s.send(b"\r\n".join([line.encode() for line in response.split("\n")]))
 
         client_s.close()

@@ -3,55 +3,52 @@ try:
 except:
     import socket
 
-response_404 = """HTTP/1.0 404 NOT FOUND
-
-<h1>404 Not Found</h1>
-"""
-
-response_500 = """HTTP/1.0 500 INTERNAL SERVER ERROR
-
-<h1>500 Internal Server Error</h1>
-"""
-
 response_template = """HTTP/1.0 200 OK
 
 %s
 """
-
 import machine
 import ntptime, utime
 from machine import RTC
-from time import sleep
-
-try:
-    seconds = ntptime.time()
-except:
-    seconds = 0
-
+seconds = ntptime.time()
 rtc = RTC()
 rtc.datetime(utime.localtime(seconds))
 
+adc = machine.ADC(0)
+
 def time():
     body = """<html>
-<body>
-<h1>Time</h1>
-<p>%s</p>
-</body>
-</html>
-""" % str(rtc.datetime())
+ <body>
+ <h1>Time</h1>
+ <p>%s</p>
+ </body>
+ </html>
+    """ % str(rtc.datetime())
 
     return response_template % body
+
 
 def dummy():
     body = "This is a dummy endpoint"
 
     return response_template % body
 
-pin = machine.Pin(10, machine.Pin.IN)
+handlers = {
+    'time': time,
+    'dummy': dummy,
+}
+
+
+switch_pin = machine.Pin(10, machine.Pin.IN)
+
+def switch():
+     body = "{state: " . switch_pin.value() . "}"
+     return response_template % body
 
 handlers = {
     'time': time,
     'dummy': dummy,
+    'switch': switch,
 }
 
 def main():
@@ -63,7 +60,7 @@ def main():
 
     s.bind(addr)
     s.listen(5)
-    print("Listening, connect your browser to http://<this_host>:8080")
+    print("Listening, connect your browser to http://<this_host>:8080/")
 
     while True:
         res = s.accept()
@@ -73,16 +70,18 @@ def main():
         print("Request:")
         print(req)
 
-        try:
-            path = req.decode().split("\r\n")[0].split(" ")[1]
-            handler = handlers[path.strip('/').split('/')[0]]
-            response = handler()
-        except KeyError:
-            response = response_404
-        except Exception as e:
-            response = response_500
-            print(str(e))
+        # The first line of a request looks like "GET /arbitrary/path/ HTTP/1.1".
+        # This grabs that first line and whittles it down to just "/arbitrary/path/"
+        path = req.decode().split("\r\n")[0].split(" ")[1]
 
+        # Given the path, identify the correct handler to use
+        handler = handlers[path.strip('/').split('/')[0]]
+
+        response = handler()
+
+        # A handler returns an entire response in the form of a multi-line string.
+        # This breaks up the response into single strings, byte-encodes them, and
+        # joins them back together with b"\r\n". Then it sends that to the client.
         client_s.send(b"\r\n".join([line.encode() for line in response.split("\n")]))
 
         client_s.close()

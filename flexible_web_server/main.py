@@ -4,17 +4,14 @@ except:
     import socket
 
 response_404 = """HTTP/1.0 404 NOT FOUND
-
 <h1>404 Not Found</h1>
 """
 
 response_500 = """HTTP/1.0 500 INTERNAL SERVER ERROR
-
 <h1>500 Internal Server Error</h1>
 """
 
 response_template = """HTTP/1.0 200 OK
-
 %s
 """
 
@@ -46,9 +43,38 @@ def dummy():
 
     return response_template % body
 
+pin = machine.Pin(9, machine.Pin.OUT)
+
+def light_on():
+    pin.value(1)
+    body = "You turned a light on!"
+    return response_template % body
+
+def light_off():
+    pin.value(0)
+    body = "You turned a light off!"
+    return response_template % body
+
+switch_pin = machine.Pin(2, machine.Pin.IN)
+
+def switch():
+    body = "{state: " + str(switch_pin.value()) + "}"
+    return response_template % body
+
+adc = machine.ADC(0)
+
+def light():
+    body = "{value: " + str(adc.read()) + "}"
+    return response_template % body
+
 handlers = {
+
     'time': time,
     'dummy': dummy,
+    'light_on': light_on,
+    'light_off': light_off,
+    'switch': switch,
+    'light': light,
 }
 
 def main():
